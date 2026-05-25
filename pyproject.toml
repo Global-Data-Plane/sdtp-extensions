@@ -1,0 +1,2 @@
+[project.entry-points."sdtp.tables"]
+DuckDBTable = "sdtp_duckdb.factory:DuckDBTableFactory"
