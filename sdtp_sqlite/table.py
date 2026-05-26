@@ -1,9 +1,11 @@
 import sqlite3
-from sdtp import InvalidDataException, BaseSQLTable
+import re
+from sdtp import BaseSQLTable, InvalidDataException
 
 class SQLiteTable(BaseSQLTable):
-    def __init__(self, table_name: str, schema: list, db_path: str):
+    def __init__(self, table_name: str, schema: list, db_path: str, spec=None):
         super().__init__(schema, table_name)
+        self.spec = spec
         self.db_path = db_path
         try:
             self.conn = sqlite3.connect(f"file:{self.db_path}?mode=ro", uri=True)
@@ -12,7 +14,10 @@ class SQLiteTable(BaseSQLTable):
             raise InvalidDataException(f"SQLite connection failed: {e}")
 
     def _execute_sql(self, query: str, params: list|None = None) -> list:
-        return [list(row) for row in self.conn.execute(query, params or []).fetchall()]
+        try:
+            return [list(row) for row in self.conn.execute(query, params or []).fetchall()]
+        except Exception as e:
+            raise InvalidDataException(f"SQLite query failed: {e}") from e
 
     def _compile_dialect_operator(self, operator: str, column: str, spec: dict) -> tuple[str, list]:
         if operator == "REGEX_MATCH":

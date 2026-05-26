@@ -1,9 +1,10 @@
 import duckdb
-from sdtp import InvalidDataException, BaseSQLTable
+from sdtp import BaseSQLTable, InvalidDataException
 
 class DuckDBTable(BaseSQLTable):
-    def __init__(self, table_name: str, schema: list, db_path: str):
+    def __init__(self, table_name: str, schema: list, db_path: str, spec=None):
         super().__init__(schema, table_name)
+        self.spec = spec
         self.db_path = db_path
         try:
             self.conn = duckdb.connect(self.db_path, read_only=True)
@@ -11,7 +12,10 @@ class DuckDBTable(BaseSQLTable):
             raise InvalidDataException(f"DuckDB connection failed: {e}")
 
     def _execute_sql(self, query: str, params: list|None = None) -> list:
-        return [list(row) for row in self.conn.execute(query, params or []).fetchall()]
+        try:
+            return [list(row) for row in self.conn.execute(query, params or []).fetchall()]
+        except Exception as e:
+            raise InvalidDataException(f"DuckDB query failed: {e}") from e
 
     def _compile_dialect_operator(self, operator: str, column: str, spec: dict) -> tuple[str, list]:
         if operator == "REGEX_MATCH":

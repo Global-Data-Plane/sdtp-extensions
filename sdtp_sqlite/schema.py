@@ -1,5 +1,5 @@
 from typing import Literal
-from sdtp import BaseTableSchema
+from sdtp import BaseTableSchema, register_table_schema
 
 class SQLiteTableSchema(BaseTableSchema):
     """
@@ -8,6 +8,8 @@ class SQLiteTableSchema(BaseTableSchema):
     type: Literal["SQLiteTable"]
     table_name: str
     db_path: str
+
+register_table_schema("SQLiteTable", SQLiteTableSchema)
 
 # Map SQLite type affinities to universal SDML types
 SQLITE_TO_SDML_TYPES = {

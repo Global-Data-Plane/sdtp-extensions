@@ -1,2 +1,17 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sdtp-extensions"
+version = "0.1.0"
+description = "External SQL table adapters for SDTP"
+requires-python = ">=3.8"
+dependencies = [
+    "sdtp",
+    "duckdb",
+]
+
 [project.entry-points."sdtp.tables"]
 DuckDBTable = "sdtp_duckdb.factory:DuckDBTableFactory"
+SQLiteTable = "sdtp_sqlite.factory:SQLiteTableFactory"

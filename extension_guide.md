@@ -44,7 +44,7 @@ Your extension requires a declarative dictionary blueprint that acts as the mini
 
 ```
 from typing import Literal
-from sdtp.sdtp_schema import BaseTableSchema
+from sdtp import BaseTableSchema, register_table_schema
 
 class MyDatabaseTableSchema(BaseTableSchema):
     """
@@ -53,20 +53,25 @@ class MyDatabaseTableSchema(BaseTableSchema):
     type: Literal["MyDatabaseTable"]
     table_name: str
     db_path: str  # Or any necessary connection string parameters
+
+register_table_schema("MyDatabaseTable", MyDatabaseTableSchema)
 ```
 ⚠️ Important: When mapping your database's internal primitives to SDML types, you must strictly map integers and floats to "number", and times to "timeofday" to ensure validation passes.
 
 ### Step 2: Implement the Table Type (table.py)
-Subclass SDMLTable directly. Rather than fetching large blocks of rows into memory, override the metadata and primary query endpoints to push processing down into your database engine natively.
+Subclass `BaseSQLTable` for relational engines. Rather than fetching large blocks of rows into memory, implement the database execution hook and metadata methods so projection and predicate handling stay in the shared SQL base class.
 ```
-from sdtp.sdtp_table import SDMLTable, RowTable, DEFAULT_FILTERED_ROW_RESULT_FORMAT
-from sdtp.sdtp_utils import InvalidDataException
+from sdtp import BaseSQLTable, InvalidDataException
 
-class MyDatabaseTable(SDMLTable):
-    def __init__(self, table_name: str, schema: list, db_path: str):
-        super().__init__(schema)
-        self.table_name = table_name
+class MyDatabaseTable(BaseSQLTable):
+    def __init__(self, table_name: str, schema: list, db_path: str, spec=None):
+        super().__init__(schema, table_name)
+        self.spec = spec
         # Initialize your database connection here...
+
+    def _execute_sql(self, query: str, params: list | None = None) -> list:
+        # Execute query with bound positional parameters and return list[list].
+        ...
 
     def all_values(self, column_name: str) -> list:
         # Delegate DISTINCT and ORDER BY calculation straight to your SQL engine
@@ -76,40 +81,30 @@ class MyDatabaseTable(SDMLTable):
         # Compute MIN() and MAX() inside the database engine
         ...
 
-    def get_filtered_rows(self, filter_spec=None, columns=None, format=DEFAULT_FILTERED_ROW_RESULT_FORMAT):
-        """
-        Intercept the query pipeline to execute:
-        1. Projection Pushdown (Select only requested columns)
-        2. Predicate Pushdown (Compile the filter_spec dict to a database WHERE clause)
-        """
-        # Execute query, bypass core loops, and return the required format directly
-        ...
-        
-    def _get_filtered_rows_from_filter(self, filter=None):
-        # Satisfy the base abstract contract fallback requirement
-...
+    def _compile_dialect_operator(self, operator: str, column: str, spec: dict) -> tuple[str, list]:
+        # Optionally handle engine-specific operators such as REGEX_MATCH.
+        return "", []
+```
 ### Step 3: Create the Factory and Registry Hook (factory.py)
 Implement an SDMLTableFactory that parses incoming setup instructions and instantiates your runtime engine table. At the bottom of this file, register your class into the core framework's TableBuilder.
 ```
-from sdtp.sdtp_table_factory import SDMLTableFactory, TableBuilder
-from sdtp.sdtp_schema import _make_table_schema
-from sdtp.sdtp_utils import InvalidDataException
+from sdtp import InvalidDataException, SDMLTableFactory, TableBuilder
+from .schema import MyDatabaseTableSchema
 from .table import MyDatabaseTable
 
 class MyDatabaseTableFactory(SDMLTableFactory):
     @classmethod
     def build_table(cls, spec, *args, **kwargs):
-        cls.check_table_type(spec["type"])
-        
-        if "db_path" not in spec or "table_name" not in spec:
-            raise InvalidDataException("Missing required initialization parameters.")
-            
-        schema_spec = _make_table_schema(spec)
-        
+        try:
+            validated_spec = MyDatabaseTableSchema.model_validate(spec)
+        except Exception as e:
+            raise InvalidDataException(f"MyDatabaseTable configuration validation failed: {e}") from e
+
         return MyDatabaseTable(
-            table_name=spec['table_name'],
-            schema=schema_spec['schema'],
-            db_path=spec['db_path']
+            table_name=validated_spec.table_name,
+            schema=[column.model_dump() for column in validated_spec.schema_fields],
+            db_path=validated_spec.db_path,
+            spec=validated_spec,
         )
 
 # This line registers your extension automatically when Python discovers your package!
