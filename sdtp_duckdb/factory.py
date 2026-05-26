@@ -1,6 +1,6 @@
 # sdtp_duckdb/factory.py
 
-from sdtp.sdtp_table_factory import SDMLTableFactory, TableBuilder
+from sdtp import SDMLTableFactory, TableBuilder
 from .table import DuckDBTable
 
 
